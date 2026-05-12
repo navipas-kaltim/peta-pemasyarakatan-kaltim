@@ -429,8 +429,9 @@
     <h1 class="title-mobile">Ditjenpas Kaltim</h1>
   </div>
   <div class="header-stats">
-    <div class="stat-box"><div class="num" id="shown-count">17</div><div class="lbl">Tampil</div></div>
-    <div class="stat-box"><div class="num">17</div><div class="lbl">Total UPT</div></div>
+    <!-- ID ditambahkan di sini agar JS bisa update angka secara otomatis -->
+    <div class="stat-box"><div class="num" id="shown-count">0</div><div class="lbl">Tampil</div></div>
+    <div class="stat-box"><div class="num" id="total-count">0</div><div class="lbl">Total UPT</div></div>
   </div>
 </header>
 
@@ -502,18 +503,22 @@ const SVG = {
 
 // ── GOOGLE SHEETS → PAPAPARSE ──────────────────────────────────────────────
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSKueAYOMUQ5THbJF-k6cE52r2b3RGBgc1OTOv9_kSqkfTmaEfo3yCxB35ZoLsf-6INvXuQiHMBvKgK/pub?output=csv';
+const PHOTO_BASE_URL = 'https://raw.githubusercontent.com/AjiDanang13/Peta-Kerja-Kaltim/main/assets/photos/';
 
 let facilities = [];
 
 function rowToFacility(row) {
-  // 1. Create a "Clean" version of the row (ignores spaces and capital letters in headers)
   const cleanRow = {};
   Object.keys(row).forEach(key => {
     cleanRow[key.trim().toLowerCase()] = row[key];
   });
 
-  // 2. Safely grab the photo path
+  // Fitur Otomatis Foto: Parse string nama gambar atau link http
   const rawPhoto = cleanRow['photo'] ? cleanRow['photo'].trim() : null;
+  let finalPhoto = null;
+  if (rawPhoto) {
+    finalPhoto = rawPhoto.startsWith('http') ? rawPhoto : PHOTO_BASE_URL + rawPhoto;
+  }
 
   return {
     id:         parseInt(cleanRow['id']),
@@ -525,7 +530,7 @@ function rowToFacility(row) {
     lng:        parseFloat(cleanRow['lng']),
     visitHours: (cleanRow['visithours'] || cleanRow['hours'] || '').replace(/\|/g, '<br>').trim(),
     gmapsQuery: (cleanRow['gmapsquery'] || '').trim(),
-    photo:      rawPhoto || null, // This is the path: assets/photos/...
+    photo:      finalPhoto, // Disambungkan ke foto otomatis
     social: {
       instagram: (cleanRow['instagram'] || '').trim() || null,
       facebook:  (cleanRow['facebook']  || '').trim() || null,
@@ -537,7 +542,7 @@ function rowToFacility(row) {
   };
 }
 
-// ── LOADING SCREEN ─────────────────────────────────────────────────────────
+// ── LOADING SCREEN (Animasi Asli NAVIPAS dikembalikan) ──────────────────────
 const loadingEl = document.createElement('div');
 Object.assign(loadingEl.style, {
   position:'fixed', inset:'0', zIndex:'99999',
@@ -600,6 +605,11 @@ _pp.onload = () => {
       facilities = results.data
         .map(rowToFacility)
         .filter(f => f.id && !isNaN(f.lat) && !isNaN(f.lng));
+      
+      // Fitur Otomatis Angka Total UPT
+      document.getElementById('total-count').textContent = facilities.length;
+      document.getElementById('shown-count').textContent = facilities.length;
+
       loadingEl.style.opacity = '0';
       setTimeout(() => loadingEl.remove(), 500);
       initMap();
@@ -632,29 +642,7 @@ const typeConfig = {
   lpn:   { color:'#2ec48a', label:'LPN',    letter:'N' },
   bapas: { color:'#fb923c', label:'BAPAS',  letter:'B' },
   kanwil:{ color:'#f87171', label:'KANWIL', letter:'K' },
-};
-const typeEmoji = { lapas:'🏛', rutan:'🔒', lpp:'🏠', lpka:'👦', lpn:'💊', bapas:'📋', kanwil:'🏢' };
-
-// ── PHOTO MAP — GitHub hosted building photos ──────────────────────────────
-const PHOTO_BASE = 'https://raw.githubusercontent.com/AjiDanang13/Peta-Kerja-Kaltim/main/assets/photos/';
-const facilityPhotos = {
-  1:  PHOTO_BASE + 'kanwil-kaltim.png',       // Kanwil Kaltim
-  2:  PHOTO_BASE + 'rutan-tanah-grogot.jpeg',  // Rutan Tanah Grogot
-  3:  PHOTO_BASE + 'bapas-balikpapan.png',     // Bapas Balikpapan
-  4:  PHOTO_BASE + 'lpka.jpeg',                // LPKA Tenggarong
-  5:  PHOTO_BASE + 'lapas-balikpapan.jpeg',    // Lapas Balikpapan
-  6:  PHOTO_BASE + 'rutan-tanjung-redeb.jpg',  // Rutan Tanjung Redeb
-  7:  PHOTO_BASE + 'lapas-samarinda.jpeg',     // Lapas Samarinda
-  8:  PHOTO_BASE + 'lapas-tenggarong.jpeg',    // Lapas Tenggarong
-  9:  PHOTO_BASE + 'lpp.jpeg',                 // LPP Tenggarong
-  10: PHOTO_BASE + 'rutan-balikpapan.jpeg',    // Rutan Balikpapan
-  11: PHOTO_BASE + 'bapas-balikpapan.png',     // Bapas Samarinda (gunakan sementara)
-  12: PHOTO_BASE + 'rutan-samarinda.png',      // Rutan Samarinda
-  13: PHOTO_BASE + 'lpn.jpeg',                 // LPN Samarinda
-  14: PHOTO_BASE + 'lapas-bontang.jpeg',       // Lapas Bontang
-  15: PHOTO_BASE + 'lapas-tarakan.png',        // Lapas Tarakan
-  16: PHOTO_BASE + 'lapas-nunukan.jpeg',       // Lapas Nunukan
-  17: PHOTO_BASE + 'bapas-tarakan.png',        // Bapas Tarakan
+  fallback:{ color:'#888', label:'LAINNYA', letter:'?' } // Mencegah Peta Blank jika salah ketik Type
 };
 const typeLabel = {
   lapas:'Lembaga Pemasyarakatan', rutan:'Rumah Tahanan Negara',
@@ -664,13 +652,12 @@ const typeLabel = {
 
 // ── MAKE PIN ICON ────────────────────────────────────────────
 function makeIcon(f, active = false) {
-  const c     = typeConfig[f.type];
+  const c     = typeConfig[f.type] || typeConfig.fallback;
   const W     = active ? 48 : 36;
   const TH    = active ? 12 : 9;
   const bw    = active ? 3 : 2;
-  const photo = facilityPhotos[f.id] || null;
+  const photo = f.photo; // Memakai foto otomatis dari spreadsheet
 
-  // Photo fills the circle; fallback to letter if photo fails
   const inner = photo
     ? `<img src="${photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;"
            onerror="this.style.display='none';this.nextSibling.style.display='flex'"/>
@@ -725,7 +712,7 @@ function socialIconsHtml(social) {
 
 // ── POPUP CONTENT BUILDER ──────────────────────────────────────────────────
 function buildPopupContent(f) {
-  const cfg  = typeConfig[f.type];
+  const cfg  = typeConfig[f.type] || typeConfig.fallback;
   const isIOS = /iP(hone|od|ad)/.test(navigator.userAgent);
   const isAndroid = /Android/.test(navigator.userAgent);
   let gurl;
@@ -741,7 +728,7 @@ function buildPopupContent(f) {
     <div class="popup-header">
       <div class="popup-type-row">
         <div class="popup-type-dot" style="background:${cfg.color}"></div>
-        <span class="popup-type-text">${typeLabel[f.type]} · ${f.city}</span>
+        <span class="popup-type-text">${typeLabel[f.type] || typeLabel.fallback} · ${f.city}</span>
       </div>
       <div class="popup-name">${f.name}</div>
     </div>
@@ -772,20 +759,50 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r
   maxZoom: 20, subdomains: 'abcd', attribution: '&copy; CARTO'
 }).addTo(map);
 
-// ── DYNAMIC CITY GROUPS (Interpolasi Posisi) ────────────────────────────────
-const cityGroups = [
-  { key:'samarinda',     label:'Samarinda',    count:5, offsetLat:-0.600, offsetLng:117.250, trueLat:-0.460, trueLng:117.138, zoom:13, ids:[1,7,11,12,13] },
-  { key:'balikpapan',    label:'Balikpapan',   count:3, offsetLat:-1.274, offsetLng:116.865, trueLat:-1.274, trueLng:116.865, zoom:13, ids:[3,5,10] },
-  { key:'tenggarong',    label:'Tenggarong',   count:3, offsetLat:-0.320, offsetLng:116.700, trueLat:-0.423, trueLng:116.980, zoom:13, ids:[4,8,9] },
-  { key:'tanah_grogot',  label:'Tanah Grogot', count:1, offsetLat:-1.879, offsetLng:116.176, trueLat:-1.879, trueLng:116.176, zoom:14, ids:[2] },
-  { key:'tanjung_redeb', label:'Tanjung Redeb',count:1, offsetLat: 2.138, offsetLng:117.498, trueLat: 2.138, trueLng:117.498, zoom:14, ids:[6] },
-  { key:'bontang',       label:'Bontang',      count:1, offsetLat: 0.056, offsetLng:117.460, trueLat: 0.056, trueLng:117.460, zoom:14, ids:[14] },
-  { key:'nunukan',       label:'Nunukan',      count:1, offsetLat: 4.042, offsetLng:117.722, trueLat: 4.042, trueLng:117.722, zoom:14, ids:[16] },
-  { key:'tarakan',       label:'Tarakan',      count:2, offsetLat: 3.307, offsetLng:117.590, trueLat: 3.307, trueLng:117.590, zoom:14, ids:[15,17] },
-];
+// ── DYNAMIC CITY GROUPS (Logika Interpolasi Asli, tapi dibangun Otomatis) ──
+// Fitur ini mempertahankan animasi gelembung Anda yang menyusut saat zoom out
+// namun kini membacanya langsung dari kolom `city` di spreadsheet.
+const cityGroupsMap = {};
+
+// Koordinat Offset Asli Anda untuk mempertahankan posisi gelembung sempurna
+const knownOffsets = {
+  'samarinda':     { lat:-0.600, lng:117.250 },
+  'balikpapan':    { lat:-1.274, lng:116.865 },
+  'tenggarong':    { lat:-0.320, lng:116.700 },
+  'tanah grogot':  { lat:-1.879, lng:116.176 },
+  'tanjung redeb': { lat: 2.138, lng:117.498 },
+  'bontang':       { lat: 0.056, lng:117.460 },
+  'nunukan':       { lat: 4.042, lng:117.722 },
+  'tarakan':       { lat: 3.307, lng:117.590 }
+};
+
+facilities.forEach(f => {
+  const rawCity = f.city || 'Lainnya';
+  const cityKey = rawCity.toLowerCase().trim();
+  const cityLabel = rawCity.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+
+  if (!cityGroupsMap[cityKey]) {
+    cityGroupsMap[cityKey] = {
+      key: cityKey.replace(/\s+/g, '_'),
+      label: cityLabel,
+      count: 0,
+      ids: [],
+      trueLat: f.lat,
+      trueLng: f.lng,
+      // Gunakan offset lama jika ada, jika kota baru gunakan koordinat UPT
+      offsetLat: knownOffsets[cityKey] ? knownOffsets[cityKey].lat : f.lat - 0.05,
+      offsetLng: knownOffsets[cityKey] ? knownOffsets[cityKey].lng : f.lng - 0.05,
+      zoom: 14
+    };
+  }
+  cityGroupsMap[cityKey].count++;
+  cityGroupsMap[cityKey].ids.push(f.id);
+});
+
+const cityGroups = Object.values(cityGroupsMap);
 
 let activeId = null;
-const ZOOM_THRESHOLD = 11; // Di bawah level ini = Tampil Grup. Di atas level ini = Tampil Pin individu.
+const ZOOM_THRESHOLD = 11;
 
 function makeCityGroupIcon(group) {
   return L.divIcon({
@@ -906,18 +923,21 @@ function renderList() {
     div.id = `fi-${f.id}`;
     div.dataset.type = f.type;
     div.dataset.name = (f.name + ' ' + f.city).toLowerCase();
-    const photo = facilityPhotos[f.id] || f.photo || null;
+    
+    // Foto otomatis dari Spreadsheet
+    const photo = f.photo; 
     const iconContent = photo
       ? `<img src="${photo}" alt="${f.name}" loading="lazy">`
       : '';
     const iconClass = photo ? `fi-icon ${f.type} has-photo` : `fi-icon ${f.type}`;
+    
     div.innerHTML = `<div class="fi-top">
       <div class="${iconClass}">${iconContent}</div>
       <div class="fi-info">
         <div class="fi-name">${f.name}</div>
         <div class="fi-city">${f.city}</div>
       </div>
-      <span class="fi-badge ${f.type}">${typeConfig[f.type].label}</span>
+      <span class="fi-badge ${f.type}">${(typeConfig[f.type] || typeConfig.fallback).label}</span>
     </div>`;
     div.addEventListener('click', e => {
       e.stopPropagation();
